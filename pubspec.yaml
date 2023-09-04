@@ -30,7 +30,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  tflite: any
+  tflite_flutter: any
   camera: any
   cupertino_icons: ^1.0.2
 
