@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'login_page.dart';
 import 'camera_page.dart';
-import 'history.dart';
+import 'history_page.dart';
 
 void main() {
   runApp(MyApp());

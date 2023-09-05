@@ -31,8 +31,11 @@ dependencies:
   flutter:
     sdk: flutter
   tflite_flutter: any
-  camera: any
+  camera: ^0.9.4+5
   cupertino_icons: ^1.0.2
+  image: any
+  path_provider: ^2.0.5
+  permission_handler: ^10.0.0
 
 dev_dependencies:
   flutter_test:
