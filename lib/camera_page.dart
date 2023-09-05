@@ -2,7 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:tflite_flutter/tflite_flutter.dart' as tfl;
-import 'history.dart';
+import 'history_page.dart';  // Make sure you have this file in your project
+import 'dart:ui';
 
 class CameraPage extends StatefulWidget {
   @override
@@ -12,18 +13,23 @@ class CameraPage extends StatefulWidget {
 class _CameraPageState extends State<CameraPage> {
   late CameraController _cameraController;
   late tfl.Interpreter interpreter;
-  late List<CameraDescription> cameras;
 
   String detectedAlphabets = "";
   String currentWord = "Current Word: ";
 
   // Customizable Parameters
-  double cameraHeight = 0.5;
-  double whiteAreaHeight = 0.5;
-  double buttonWidth = 100;
-  double buttonHeight = 50;
-  double fontSizeCurrentWord = 24;
-  double fontSizeDetectedAlphabets = 20;
+  double cameraHeight = 0.7; // Height of camera preview
+  double whiteAreaHeight = 0.3; // Height of white area
+  double buttonWidth = 120; // Customizable button width
+  double buttonHeight = 50; // Customizable button height
+  double fontSizeCurrentWord = 24; // Customizable font size for current word
+  double fontSizeDetectedAlphabets = 20; // Customizable font size for detected alphabets
+  double focusBoxSize = 275;  // Customizable focus box size
+  double buttonVerticalOffset = 40;  // Customizable button vertical offset
+  double buttonBorderDistance = 50; // Customizable distance between button and border
+  double nextButtonBorderDistance = 25; // Customizable distance between next button and border
+  double focusBoxCenterOffset = 60; // Customizable distance between focus box and center
+  Color overlayColor = Colors.black.withOpacity(0.5);  // Color of the overlay
 
   @override
   void initState() {
@@ -32,6 +38,8 @@ class _CameraPageState extends State<CameraPage> {
     _loadModel();
   }
 
+
+  // Initialize camera
   Future<void> _initializeCamera() async {
     final cameras = await availableCameras();
     _cameraController = CameraController(cameras[0], ResolutionPreset.medium);
@@ -41,10 +49,12 @@ class _CameraPageState extends State<CameraPage> {
     });
   }
 
+  // Load TFLite model
   Future<void> _loadModel() async {
     interpreter = await tfl.Interpreter.fromAsset('assets/model_unquant.tflite');
   }
 
+  // Run inference on each frame
   @override
   void dispose() {
     _cameraController.dispose();
@@ -52,6 +62,7 @@ class _CameraPageState extends State<CameraPage> {
     super.dispose();
   }
 
+  // Reset the detected alphabets
   void _reset() {
     setState(() {
       detectedAlphabets = "";
@@ -59,14 +70,15 @@ class _CameraPageState extends State<CameraPage> {
     });
   }
 
+  // Append detected alphabets to current word
   void _nextWord() {
     setState(() {
-      // Placeholder logic to append detected alphabets to current word
-      currentWord += " " + detectedAlphabets;
+      currentWord = "Current Word: ";
       detectedAlphabets = "";
     });
   }
 
+  // Run inference on each frame
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -82,52 +94,58 @@ class _CameraPageState extends State<CameraPage> {
                 ? Container()
                 : CameraPreview(_cameraController),
           ),
-          // White Area
-          Positioned(
-            top: 10,
-            right: 10,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => HistoryPage()),
-                );
-              },
-              child: Text(
-                'History',
-                style: TextStyle(fontSize: 18), // Customizable
-              ),
-              style: ElevatedButton.styleFrom(
-                minimumSize: Size(buttonWidth, buttonHeight),
+
+          // Overlay
+          Positioned.fill(
+            child: CustomPaint(
+              painter: FocusBoxPainter(
+                focusBoxSize: focusBoxSize,
+                focusBoxOffset: focusBoxCenterOffset,
+                overlayColor: Colors.black.withOpacity(0.5),
               ),
             ),
           ),
+
+          // History Button
+          Positioned(
+            top: buttonVerticalOffset,  // Customizable
+            right: buttonBorderDistance, // Customizable
+            child: ElevatedButton(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => HistoryPage())),
+              child: Text('History', style: TextStyle(fontSize: 18)),
+              style: ElevatedButton.styleFrom(
+                minimumSize: Size(buttonWidth, buttonHeight),  // Customizable
+              ),
+            ),
+          ),
+
           // Reset Button
           Positioned(
-            top: 10,
-            left: 10,
+            top: buttonVerticalOffset,  // Customizable
+            left: buttonBorderDistance, // Customizable
             child: ElevatedButton(
               onPressed: _reset,
-              child: Text(
-                'Reset',
-                style: TextStyle(fontSize: 18), // Customizable
-              ),
+              child: Text('Reset', style: TextStyle(fontSize: 18)),
               style: ElevatedButton.styleFrom(
-                minimumSize: Size(buttonWidth, buttonHeight),
+                minimumSize: Size(buttonWidth, buttonHeight),  // Customizable
               ),
             ),
           ),
-          // Next Word Button
-          Center(
+
+          // Focus Box
+          Positioned(
+            top: MediaQuery.of(context).size.height * 0.5 - focusBoxSize / 2 - focusBoxCenterOffset,
+            left: MediaQuery.of(context).size.width * 0.5 - focusBoxSize / 2,
             child: Container(
-              width: 100, // Customizable
-              height: 100, // Customizable
+              width: focusBoxSize,
+              height: focusBoxSize,
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.red, width: 2),
+                border: Border.all(color: Colors.red, width: 4),
               ),
             ),
           ),
-          // Current Word and Detected Alphabets
+
+          // White Area for detected alphabets and current word
           Positioned(
             bottom: 0,
             left: 0,
@@ -138,23 +156,26 @@ class _CameraPageState extends State<CameraPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  Text(
-                    currentWord,
-                    style: TextStyle(fontSize: fontSizeCurrentWord),
-                  ),
-                  Text(
-                    detectedAlphabets,
-                    style: TextStyle(fontSize: fontSizeDetectedAlphabets),
-                  ),
+                  // Current Word
                   Align(
-                    alignment: Alignment.bottomLeft,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        _nextWord();
-                      },
-                      child: Text('Next Word'),
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: Size(buttonWidth, buttonHeight),
+                    alignment: Alignment.center,
+                    child: Text(currentWord, style: TextStyle(fontSize: fontSizeCurrentWord)),
+                  ),
+
+                  // Detected Alphabets
+                  Text(detectedAlphabets, style: TextStyle(fontSize: fontSizeDetectedAlphabets)),  // Customizable
+
+                  // Next Word Button
+                  Align(
+                    alignment: Alignment.bottomRight,
+                    child: Padding(
+                      padding: EdgeInsets.all(nextButtonBorderDistance),  // Customizable
+                      child: ElevatedButton(
+                        onPressed: _nextWord,
+                        child: Text('Next Word'),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: Size(buttonWidth, buttonHeight),  // Customizable
+                        ),
                       ),
                     ),
                   ),
@@ -165,5 +186,51 @@ class _CameraPageState extends State<CameraPage> {
         ],
       ),
     );
+  }
+}
+
+class FocusBoxPainter extends CustomPainter {
+  final double focusBoxSize;
+  final double focusBoxOffset;
+  final Color overlayColor;
+
+  FocusBoxPainter({
+    required this.focusBoxSize,
+    required this.focusBoxOffset,
+    required this.overlayColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    double centerX = size.width / 2;
+    double centerY = (size.height / 2) - focusBoxOffset;
+
+    Rect focusRect = Rect.fromCenter(
+      center: Offset(centerX, centerY),
+      width: focusBoxSize,
+      height: focusBoxSize,
+    );
+
+    Rect outerRect = Rect.fromPoints(
+      Offset(0, 0),
+      Offset(size.width, size.height),
+    );
+
+    canvas.drawRect(
+      outerRect,
+      Paint()
+        ..color = overlayColor,
+    );
+
+    canvas.drawRect(
+      focusRect,
+      Paint()
+        ..blendMode = BlendMode.clear,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) {
+    return true;
   }
 }
