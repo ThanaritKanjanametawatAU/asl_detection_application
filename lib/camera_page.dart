@@ -4,6 +4,14 @@ import 'package:camera/camera.dart';
 import 'package:tflite_flutter/tflite_flutter.dart' as tfl;
 import 'history_page.dart';  // Make sure you have this file in your project
 import 'dart:ui';
+import 'camera_focusbox.dart';
+import 'camera_backend.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:path/path.dart' as p;
+
+
 
 class CameraPage extends StatefulWidget {
   @override
@@ -16,6 +24,7 @@ class _CameraPageState extends State<CameraPage> {
 
   String detectedAlphabets = "";
   String currentWord = "Current Word: ";
+  List<File> capturedImages = [];
 
   // Customizable Parameters
   double cameraHeight = 0.7; // Height of camera preview
@@ -31,9 +40,12 @@ class _CameraPageState extends State<CameraPage> {
   double focusBoxCenterOffset = 60; // Customizable distance between focus box and center
   Color overlayColor = Colors.black.withOpacity(0.5);  // Color of the overlay
 
+
+
   @override
   void initState() {
     super.initState();
+    _requestPermission();
     _initializeCamera();
     _loadModel();
   }
@@ -42,11 +54,74 @@ class _CameraPageState extends State<CameraPage> {
   // Initialize camera
   Future<void> _initializeCamera() async {
     final cameras = await availableCameras();
-    _cameraController = CameraController(cameras[0], ResolutionPreset.medium);
+    _cameraController = CameraController(cameras[0], ResolutionPreset.medium, );
     _cameraController.initialize().then((_) {
       if (!mounted) return;
       setState(() {});
     });
+    Timer.periodic(Duration(seconds: 10), (Timer t) => _captureImage());
+  }
+
+  Future<void> _captureImage() async {
+    if (_cameraController.value.isInitialized) {
+      // Generate the file path
+      final dir = await getTemporaryDirectory();
+      final String path = p.join(
+        dir.path,
+        'image_${DateTime.now()}.jpg',
+      );
+
+      try {
+        // Capture the image and save it to the given path
+        XFile file = await _cameraController.takePicture();
+        File savedFile = File(path);
+
+        // Move the file to the new path
+        await file.saveTo(path);
+
+        // Add to your capturedImages list
+        capturedImages.add(savedFile);
+      } catch (e) {
+        print('Error capturing image: $e');
+      }
+    }
+  }
+
+  Future<void> _requestPermission() async {
+    var status = await Permission.storage.status;
+    if (!status.isGranted) {
+      status = await Permission.storage.request();
+    }
+    if (status.isGranted) {
+      // Pop up a dialog to inform user that you will be using storage
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text("Storage Permission Granted"),
+          content: Text("This app will now be able to store images in your device"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("OK"),
+            ),
+          ],
+        ),
+      );
+    } else {
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text("Storage Permission Denied"),
+          content: Text("This app will not be able to store images in your device"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("OK"),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   // Load TFLite model
@@ -54,7 +129,7 @@ class _CameraPageState extends State<CameraPage> {
     interpreter = await tfl.Interpreter.fromAsset('assets/model_unquant.tflite');
   }
 
-  // Run inference on each frame
+  // Dispose camera controller and interpreter
   @override
   void dispose() {
     _cameraController.dispose();
@@ -111,7 +186,12 @@ class _CameraPageState extends State<CameraPage> {
             top: buttonVerticalOffset,  // Customizable
             right: buttonBorderDistance, // Customizable
             child: ElevatedButton(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => HistoryPage())),
+              onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => HistoryPage(capturedImages: capturedImages),
+                  )
+              ),
               child: Text('History', style: TextStyle(fontSize: 18)),
               style: ElevatedButton.styleFrom(
                 minimumSize: Size(buttonWidth, buttonHeight),  // Customizable
@@ -186,51 +266,5 @@ class _CameraPageState extends State<CameraPage> {
         ],
       ),
     );
-  }
-}
-
-class FocusBoxPainter extends CustomPainter {
-  final double focusBoxSize;
-  final double focusBoxOffset;
-  final Color overlayColor;
-
-  FocusBoxPainter({
-    required this.focusBoxSize,
-    required this.focusBoxOffset,
-    required this.overlayColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    double centerX = size.width / 2;
-    double centerY = (size.height / 2) - focusBoxOffset;
-
-    Rect focusRect = Rect.fromCenter(
-      center: Offset(centerX, centerY),
-      width: focusBoxSize,
-      height: focusBoxSize,
-    );
-
-    Rect outerRect = Rect.fromPoints(
-      Offset(0, 0),
-      Offset(size.width, size.height),
-    );
-
-    canvas.drawRect(
-      outerRect,
-      Paint()
-        ..color = overlayColor,
-    );
-
-    canvas.drawRect(
-      focusRect,
-      Paint()
-        ..blendMode = BlendMode.clear,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true;
   }
 }
