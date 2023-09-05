@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 class LoginPage extends StatelessWidget {
   // Configuration for easy adjustments
-  final double topSpacing = 60.0;
+  final double topSpacing = 50.0;
   final double logoHeight = 150.0;
   final double betweenLogoAndField = 50.0;
   final double textFieldHeight = 60.0;
@@ -10,7 +10,7 @@ class LoginPage extends StatelessWidget {
   final double textFieldSpacing = 30.0;
   final double textFieldCornerRadius = 25.0;
   final double buttonHeight = 50.0;
-  final double buttonWidth = 200.0;
+  final double buttonWidth = 225.0;
   final double buttonCornerRadius = 25.0;
   final double buttonSpacing = 60.0;
   final double bottomSpacing = 60.0;

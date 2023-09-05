@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'login_page.dart';
+import 'camera_page.dart';
+import 'history.dart';
 
 void main() {
   runApp(MyApp());
@@ -20,31 +22,6 @@ class MyApp extends StatelessWidget {
 }
 
 
-class CameraPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('Camera Page')),
-      body: Center(
-        child: ElevatedButton(
-          onPressed: () {
-            Navigator.pushNamed(context, '/history');
-          },
-          child: Text('Go to History'),
-        ),
-      ),
-    );
-  }
-}
 
-class HistoryPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('History Page')),
-      body: Center(
-        child: Text('History goes here'),
-      ),
-    );
-  }
-}
+
+
