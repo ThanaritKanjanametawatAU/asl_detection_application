@@ -1,16 +1,18 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:flutter/rendering.dart';
 import 'package:tflite_flutter/tflite_flutter.dart' as tfl;
 import 'history_page.dart';  // Make sure you have this file in your project
 import 'dart:ui';
 import 'camera_focusbox.dart';
-import 'camera_backend.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path/path.dart' as p;
-
+import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
+import 'dart:typed_data';
 
 
 class CameraPage extends StatefulWidget {
@@ -25,6 +27,8 @@ class _CameraPageState extends State<CameraPage> {
   String detectedAlphabets = "";
   String currentWord = "Current Word: ";
   List<File> capturedImages = [];
+  // Declare this at the class level
+  List<String> labels = [];
 
   // Customizable Parameters
   double cameraHeight = 0.7; // Height of camera preview
@@ -40,6 +44,9 @@ class _CameraPageState extends State<CameraPage> {
   double focusBoxCenterOffset = 60; // Customizable distance between focus box and center
   Color overlayColor = Colors.black.withOpacity(0.5);  // Color of the overlay
 
+  int imageInputWidth = 480;
+  int imageInputHeight = 270;
+
 
 
   @override
@@ -47,6 +54,7 @@ class _CameraPageState extends State<CameraPage> {
     super.initState();
     _requestPermission();
     _initializeCamera();
+    loadLabels();
     _loadModel();
   }
 
@@ -61,6 +69,16 @@ class _CameraPageState extends State<CameraPage> {
     });
     Timer.periodic(Duration(seconds: 10), (Timer t) => _captureImage());
   }
+
+  // Load Labels from labels.txt
+  Future<void> loadLabels() async {
+    final labelData = await rootBundle.loadString('assets/model/labels.txt');
+    labels = labelData.split('\n');
+    for (int i = 0; i < labels.length; i++) {
+      print(i.toString() + ": " + labels[i]);
+    }
+  }
+
 
   Future<void> _captureImage() async {
     if (_cameraController.value.isInitialized) {
@@ -81,6 +99,10 @@ class _CameraPageState extends State<CameraPage> {
 
         // Add to your capturedImages list
         capturedImages.add(savedFile);
+
+        // Perform inference on the captured image
+        _showInferenceResult();  // Call inference function here
+
       } catch (e) {
         print('Error capturing image: $e');
       }
@@ -126,7 +148,72 @@ class _CameraPageState extends State<CameraPage> {
 
   // Load TFLite model
   Future<void> _loadModel() async {
-    interpreter = await tfl.Interpreter.fromAsset('assets/model_unquant.tflite');
+    interpreter = await tfl.Interpreter.fromAsset('assets/model/model_unquant.tflite');
+  }
+
+
+
+// Perform inference on each image and get predictions
+  Future<String> performInference(Uint8List imgBytes) async {
+    String result = "";
+
+    img.Image? image = img.decodeImage(imgBytes);
+    img.Image resizedImg = img.copyResize(image!, width: imageInputWidth, height: imageInputHeight);
+
+    // Convert to 4D tensor-like structure
+    var tensor = Float32List(1 * imageInputWidth * imageInputHeight * 3);
+    var index = 0;
+    for (int y = 0; y < 29; y++) {
+      for (int x = 0; x < 29; x++) {
+        final pixel = resizedImg.getPixel(x, y);
+        tensor[index++] = img.getRed(pixel) / 255.0;
+        tensor[index++] = img.getGreen(pixel) / 255.0;
+        tensor[index++] = img.getBlue(pixel) / 255.0;
+      }
+    }
+
+    final inputShape = [1, imageInputWidth, imageInputHeight, 3];
+    final outputShape = [1, 27];
+
+    var output = Float32List(1 * 27).reshape(outputShape);
+
+
+    var options = tfl.InterpreterOptions()..threads = 1;
+    final interpreter = await tfl.Interpreter.fromAsset('assets/model/model_unquant.tflite', options: options);
+
+    interpreter.run(tensor.reshape(inputShape), output);
+
+    print("Output length: ${output.length}");
+    print("Output[0] length: ${output[0].length}");
+    print("Labels length: ${labels.length}");
+
+    double highestProb = 0;
+    int labelIndex = 0;
+
+    int minLength = (output[0].length < labels.length) ? output[0].length : labels.length;
+
+    for (int i = 0; i < minLength; i++) {
+      print(labels[i] + ": " + output[0][i].toString());
+      if (output[0][i] > highestProb) {
+        highestProb = output[0][i];
+        labelIndex = i;
+      }
+    }
+
+    String label = labels[labelIndex];
+    result = "Predicted label: $label with probability: $highestProb";
+
+    return result;
+  }
+
+  Future<void> _showInferenceResult() async {
+    File latestImage = capturedImages.last;
+
+    Uint8List imgBytes = await latestImage.readAsBytes();
+
+    String inferenceResult = await performInference(imgBytes);
+
+    print("Inference Result: " + inferenceResult);
   }
 
   // Dispose camera controller and interpreter
