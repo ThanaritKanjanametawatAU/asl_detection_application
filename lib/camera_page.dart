@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:flutter/rendering.dart';
 import 'package:tflite_flutter/tflite_flutter.dart' as tfl;
 import 'history_page.dart';  // Make sure you have this file in your project
-import 'dart:ui';
 import 'camera_focusbox.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -27,7 +25,7 @@ class _CameraPageState extends State<CameraPage> {
   String detectedAlphabets = "";
   String currentWord = "Current Word: ";
   List<File> capturedImages = [];
-  // Declare this at the class level
+  List<String> capturedAlphabets = [];
   List<String> labels = [];
 
   // Customizable Parameters
@@ -36,7 +34,7 @@ class _CameraPageState extends State<CameraPage> {
   double buttonWidth = 120; // Customizable button width
   double buttonHeight = 50; // Customizable button height
   double fontSizeCurrentWord = 24; // Customizable font size for current word
-  double fontSizeDetectedAlphabets = 20; // Customizable font size for detected alphabets
+  double fontSizeDetectedAlphabets = 26; // Customizable font size for detected alphabets
   double focusBoxSize = 275;  // Customizable focus box size
   double buttonVerticalOffset = 40;  // Customizable button vertical offset
   double buttonBorderDistance = 50; // Customizable distance between button and border
@@ -47,13 +45,15 @@ class _CameraPageState extends State<CameraPage> {
   int imageInputWidth = 480;
   int imageInputHeight = 270;
 
+  int labelBufferSize = 6;
+
 
 
   @override
   void initState() {
+    _initializeCamera();
     super.initState();
     _requestPermission();
-    _initializeCamera();
     loadLabels();
     _loadModel();
   }
@@ -61,22 +61,23 @@ class _CameraPageState extends State<CameraPage> {
 
   // Initialize camera
   Future<void> _initializeCamera() async {
-    final cameras = await availableCameras();
-    _cameraController = CameraController(cameras[0], ResolutionPreset.medium, );
-    _cameraController.initialize().then((_) {
-      if (!mounted) return;
-      setState(() {});
-    });
-    Timer.periodic(Duration(seconds: 10), (Timer t) => _captureImage());
+    try {
+      final cameras = await availableCameras();
+      _cameraController = CameraController(cameras[0], ResolutionPreset.medium);
+      await _cameraController.initialize();
+      if (mounted) setState(() {});
+    } catch (e) {
+      print("Error initializing camera: $e");
+    }
+
+    // set Camera Interval
+    Timer.periodic(const Duration(seconds: 1), (Timer t) => _captureImage());
   }
 
   // Load Labels from labels.txt
   Future<void> loadLabels() async {
     final labelData = await rootBundle.loadString('assets/model/labels.txt');
     labels = labelData.split('\n');
-    for (int i = 0; i < labels.length; i++) {
-      print(i.toString() + ": " + labels[i]);
-    }
   }
 
 
@@ -100,8 +101,34 @@ class _CameraPageState extends State<CameraPage> {
         // Add to your capturedImages list
         capturedImages.add(savedFile);
 
+        // Delete the first image if the list length is greater than 5
+        if (capturedImages.length > labelBufferSize) {
+
+          // if all element in capturedAlphabets is the same, add to detectedAlphabets
+          if (capturedAlphabets.every((element) => element == capturedAlphabets[0])) {
+            setState(() {
+              detectedAlphabets += capturedAlphabets[0];
+              // clear capturedAlphabets and clear and delete files in capturedImages
+              capturedAlphabets.clear();
+
+              for (int i = 0; i < capturedImages.length; i++) {
+                capturedImages[i].delete();
+              }
+              capturedImages.clear();
+
+            });
+          }
+          else{
+            capturedImages.first.delete();
+            capturedImages.removeAt(0);
+          };
+        }
+
+
         // Perform inference on the captured image
         _showInferenceResult();  // Call inference function here
+
+
 
       } catch (e) {
         print('Error capturing image: $e');
@@ -113,36 +140,6 @@ class _CameraPageState extends State<CameraPage> {
     var status = await Permission.storage.status;
     if (!status.isGranted) {
       status = await Permission.storage.request();
-    }
-    if (status.isGranted) {
-      // Pop up a dialog to inform user that you will be using storage
-      await showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text("Storage Permission Granted"),
-          content: Text("This app will now be able to store images in your device"),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text("OK"),
-            ),
-          ],
-        ),
-      );
-    } else {
-      await showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text("Storage Permission Denied"),
-          content: Text("This app will not be able to store images in your device"),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text("OK"),
-            ),
-          ],
-        ),
-      );
     }
   }
 
@@ -183,25 +180,21 @@ class _CameraPageState extends State<CameraPage> {
 
     interpreter.run(tensor.reshape(inputShape), output);
 
-    print("Output length: ${output.length}");
-    print("Output[0] length: ${output[0].length}");
-    print("Labels length: ${labels.length}");
-
     double highestProb = 0;
     int labelIndex = 0;
 
     int minLength = (output[0].length < labels.length) ? output[0].length : labels.length;
 
     for (int i = 0; i < minLength; i++) {
-      print(labels[i] + ": " + output[0][i].toString());
+      print("${labels[i]}: ${output[0][i]}");
       if (output[0][i] > highestProb) {
         highestProb = output[0][i];
         labelIndex = i;
       }
     }
 
-    String label = labels[labelIndex];
-    result = "Predicted label: $label with probability: $highestProb";
+    String label = labels[labelIndex][3];
+    result = "$label";
 
     return result;
   }
@@ -213,7 +206,10 @@ class _CameraPageState extends State<CameraPage> {
 
     String inferenceResult = await performInference(imgBytes);
 
-    print("Inference Result: " + inferenceResult);
+    // add result to capturedAlphabets
+    capturedAlphabets.add(inferenceResult);
+
+    print("Inference Result: $inferenceResult");
   }
 
   // Dispose camera controller and interpreter
@@ -252,9 +248,9 @@ class _CameraPageState extends State<CameraPage> {
             left: 0,
             right: 0,
             bottom: MediaQuery.of(context).size.height * whiteAreaHeight,
-            child: !_cameraController.value.isInitialized
-                ? Container()
-                : CameraPreview(_cameraController),
+            child: _cameraController.value.isInitialized == true
+                ? CameraPreview(_cameraController)
+                : Container(),
           ),
 
           // Overlay
@@ -279,10 +275,10 @@ class _CameraPageState extends State<CameraPage> {
                     builder: (context) => HistoryPage(capturedImages: capturedImages),
                   )
               ),
-              child: Text('History', style: TextStyle(fontSize: 18)),
               style: ElevatedButton.styleFrom(
                 minimumSize: Size(buttonWidth, buttonHeight),  // Customizable
               ),
+              child: const Text('History', style: TextStyle(fontSize: 18)),
             ),
           ),
 
@@ -292,10 +288,10 @@ class _CameraPageState extends State<CameraPage> {
             left: buttonBorderDistance, // Customizable
             child: ElevatedButton(
               onPressed: _reset,
-              child: Text('Reset', style: TextStyle(fontSize: 18)),
               style: ElevatedButton.styleFrom(
                 minimumSize: Size(buttonWidth, buttonHeight),  // Customizable
               ),
+              child: const Text('Reset', style: TextStyle(fontSize: 18)),
             ),
           ),
 
@@ -339,10 +335,10 @@ class _CameraPageState extends State<CameraPage> {
                       padding: EdgeInsets.all(nextButtonBorderDistance),  // Customizable
                       child: ElevatedButton(
                         onPressed: _nextWord,
-                        child: Text('Next Word'),
                         style: ElevatedButton.styleFrom(
                           minimumSize: Size(buttonWidth, buttonHeight),  // Customizable
                         ),
+                        child: const Text('Next Word'),
                       ),
                     ),
                   ),
