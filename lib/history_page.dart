@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 class HistoryPage extends StatelessWidget {
   final List<File>? capturedImages;
 
-  HistoryPage({this.capturedImages});
+  HistoryPage({this.capturedImages}); // Receiving capturedImages from CameraPage
 
   @override
   Widget build(BuildContext context) {

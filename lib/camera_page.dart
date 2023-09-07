@@ -1,16 +1,16 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:tflite_flutter/tflite_flutter.dart' as tfl;
-import 'history_page.dart';  // Make sure you have this file in your project
-import 'camera_focusbox.dart';
-import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path/path.dart' as p;
-import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
-import 'dart:typed_data';
+import 'history_page.dart';
+import 'camera_focusbox.dart';
 
 
 class CameraPage extends StatefulWidget {
@@ -19,14 +19,16 @@ class CameraPage extends StatefulWidget {
 }
 
 class _CameraPageState extends State<CameraPage> {
+  // Camera Controller and Interpreter
   late CameraController _cameraController;
   late tfl.Interpreter interpreter;
+  List<String> labels = [];
 
+  // Inference Result
   String detectedAlphabets = "";
   String currentWord = "Current Word: ";
   List<File> capturedImages = [];
   List<String> capturedAlphabets = [];
-  List<String> labels = [];
 
   // Customizable Parameters
   double cameraHeight = 0.7; // Height of camera preview
@@ -80,7 +82,7 @@ class _CameraPageState extends State<CameraPage> {
     labels = labelData.split('\n');
   }
 
-
+  // Capture image and save it to the given path
   Future<void> _captureImage() async {
     if (_cameraController.value.isInitialized) {
       // Generate the file path
@@ -136,6 +138,7 @@ class _CameraPageState extends State<CameraPage> {
     }
   }
 
+  // Request storage permission
   Future<void> _requestPermission() async {
     var status = await Permission.storage.status;
     if (!status.isGranted) {
@@ -150,7 +153,7 @@ class _CameraPageState extends State<CameraPage> {
 
 
 
-// Perform inference on each image and get predictions
+  // Perform inference on each image and get predictions
   Future<String> performInference(Uint8List imgBytes) async {
     String result = "";
 
@@ -199,6 +202,7 @@ class _CameraPageState extends State<CameraPage> {
     return result;
   }
 
+  // Show inference result
   Future<void> _showInferenceResult() async {
     File latestImage = capturedImages.last;
 
@@ -236,118 +240,132 @@ class _CameraPageState extends State<CameraPage> {
     });
   }
 
-  // Run inference on each frame
+
+  // Frontend
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
-          // Camera Preview
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: MediaQuery.of(context).size.height * whiteAreaHeight,
-            child: _cameraController.value.isInitialized == true
-                ? CameraPreview(_cameraController)
-                : Container(),
-          ),
-
-          // Overlay
-          Positioned.fill(
-            child: CustomPaint(
-              painter: FocusBoxPainter(
-                focusBoxSize: focusBoxSize,
-                focusBoxOffset: focusBoxCenterOffset,
-                overlayColor: Colors.black.withOpacity(0.5),
-              ),
-            ),
-          ),
-
-          // History Button
-          Positioned(
-            top: buttonVerticalOffset,  // Customizable
-            right: buttonBorderDistance, // Customizable
-            child: ElevatedButton(
-              onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => HistoryPage(capturedImages: capturedImages),
-                  )
-              ),
-              style: ElevatedButton.styleFrom(
-                minimumSize: Size(buttonWidth, buttonHeight),  // Customizable
-              ),
-              child: const Text('History', style: TextStyle(fontSize: 18)),
-            ),
-          ),
-
-          // Reset Button
-          Positioned(
-            top: buttonVerticalOffset,  // Customizable
-            left: buttonBorderDistance, // Customizable
-            child: ElevatedButton(
-              onPressed: _reset,
-              style: ElevatedButton.styleFrom(
-                minimumSize: Size(buttonWidth, buttonHeight),  // Customizable
-              ),
-              child: const Text('Reset', style: TextStyle(fontSize: 18)),
-            ),
-          ),
-
-          // Focus Box
-          Positioned(
-            top: MediaQuery.of(context).size.height * 0.5 - focusBoxSize / 2 - focusBoxCenterOffset,
-            left: MediaQuery.of(context).size.width * 0.5 - focusBoxSize / 2,
-            child: Container(
-              width: focusBoxSize,
-              height: focusBoxSize,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.red, width: 4),
-              ),
-            ),
-          ),
-
-          // White Area for detected alphabets and current word
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            top: MediaQuery.of(context).size.height * cameraHeight,
-            child: Container(
-              color: Colors.white,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // Current Word
-                  Align(
-                    alignment: Alignment.center,
-                    child: Text(currentWord, style: TextStyle(fontSize: fontSizeCurrentWord)),
-                  ),
-
-                  // Detected Alphabets
-                  Text(detectedAlphabets, style: TextStyle(fontSize: fontSizeDetectedAlphabets)),  // Customizable
-
-                  // Next Word Button
-                  Align(
-                    alignment: Alignment.bottomRight,
-                    child: Padding(
-                      padding: EdgeInsets.all(nextButtonBorderDistance),  // Customizable
-                      child: ElevatedButton(
-                        onPressed: _nextWord,
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: Size(buttonWidth, buttonHeight),  // Customizable
-                        ),
-                        child: const Text('Next Word'),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _buildCameraPreview(),
+          _buildOverlay(),
+          _buildHistoryButton(),
+          _buildResetButton(),
+          _buildFocusBox(),
+          _buildWhiteArea(),
         ],
       ),
     );
   }
+
+  Widget _buildCameraPreview() {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: MediaQuery.of(context).size.height * whiteAreaHeight,
+      child: _cameraController.value.isInitialized
+          ? CameraPreview(_cameraController)
+          : Container(),
+    );
+  }
+
+  Widget _buildOverlay() {
+    return Positioned.fill(
+      child: CustomPaint(
+        painter: FocusBoxPainter(
+          focusBoxSize: focusBoxSize,
+          focusBoxOffset: focusBoxCenterOffset,
+          overlayColor: overlayColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoryButton() {
+    return Positioned(
+      top: buttonVerticalOffset,
+      right: buttonBorderDistance,
+      child: ElevatedButton(
+        onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => HistoryPage(capturedImages: capturedImages),
+            )),
+        style: ElevatedButton.styleFrom(
+          minimumSize: Size(buttonWidth, buttonHeight),
+        ),
+        child: const Text('History', style: TextStyle(fontSize: 18)),
+      ),
+    );
+  }
+
+  Widget _buildResetButton() {
+    return Positioned(
+      top: buttonVerticalOffset,
+      left: buttonBorderDistance,
+      child: ElevatedButton(
+        onPressed: _reset,
+        style: ElevatedButton.styleFrom(
+          minimumSize: Size(buttonWidth, buttonHeight),
+        ),
+        child: const Text('Reset', style: TextStyle(fontSize: 18)),
+      ),
+    );
+  }
+
+  Widget _buildFocusBox() {
+    return Positioned(
+      top: MediaQuery.of(context).size.height * 0.5 - focusBoxSize / 2 - focusBoxCenterOffset,
+      left: MediaQuery.of(context).size.width * 0.5 - focusBoxSize / 2,
+      child: Container(
+        width: focusBoxSize,
+        height: focusBoxSize,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.red, width: 4),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWhiteArea() {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      top: MediaQuery.of(context).size.height * cameraHeight,
+      child: Container(
+        color: Colors.white,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Align(
+              alignment: Alignment.center,
+              child: Text(currentWord, style: TextStyle(fontSize: fontSizeCurrentWord)),
+            ),
+            Text(detectedAlphabets, style: TextStyle(fontSize: fontSizeDetectedAlphabets)),
+            Align(
+              alignment: Alignment.bottomRight,
+              child: Padding(
+                padding: EdgeInsets.all(nextButtonBorderDistance),
+                child: ElevatedButton(
+                  onPressed: _nextWord,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: Size(buttonWidth, buttonHeight),
+                  ),
+                  child: const Text('Next Word'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+
+
+
+
 }
